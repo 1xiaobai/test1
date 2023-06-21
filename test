@@ -1,0 +1,146 @@
+import React, { useState, useEffect } from 'react';
+import cn from 'classnames';
+import { View, Button, RadioGroup, Label, Radio } from '@tarojs/components';
+import Taro, { useDidShow } from '@tarojs/taro';
+import { AtModal, AtModalContent, AtModalAction } from 'taro-ui';
+import * as request from '@utils/request';
+// import * as Utils from '@utils/utils';
+import styles from './index.scss';
+/**
+ * @param
+ * detailData 订单详情
+ */
+type cancelInfo = {
+  detailData: any;
+  orderDetail: Function;
+  setYbModalShow: Function;
+};
+const radioList = [
+  { value: '挂错/重新挂号', checked: true },
+  { value: '计划有变/临时有事', checked: false },
+  { value: '其他原因', checked: false },
+];
+
+let waitUserAuthFlag = false;
+
+const Index: React.FC<cancelInfo> = props => {
+  const { detailData, orderDetail, setYbModalShow } = props;
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [modalShow, setModalShow] = useState<boolean>(false);
+  const [radioValue, setRadioValue] = useState<string>('');
+  const [btnDisable, setBtnDisable] = useState<boolean>(false);
+
+  useEffect(() => {
+    handelValue(0);
+
+    // 核心主动发起 等待用户授权退款
+    try {
+      if (Number(detailData?.refundList[0]?.refundStatus) === 6) {
+        waitUserAuthFlag = true;
+      } else {
+        waitUserAuthFlag = false;
+      }
+    } catch (error) {
+      waitUserAuthFlag = false;
+    }
+  }, []); // eslint-disable-line
+
+  const handelValue = async key => {
+    setRadioValue(radioList[key].value);
+  };
+
+  const cancelOrder = async () => {
+    // const regx = /^[\u4e00-\u9fa50-9A-Za-z]*$/;
+    // if (!regx.test(cancelReason)) {
+    //   Taro.showToast({
+    //     title: '只支持填写中英文和数字，请检查填写的内容',
+    //     icon: 'none',
+    //   });
+    //   return;
+    // }
+    const { orderId = '' } = detailData;
+
+    await request.post('/api/register/cancelorder', {
+      orderId,
+      cancelReason: radioValue,
+    });
+
+    Taro.showToast({
+      title: '取消成功',
+      icon: 'success',
+    });
+    setModalShow(false);
+
+    orderDetail();
+  };
+
+  const handleCancel = () => {
+    setCancelReason('');
+    setModalShow(false);
+  };
+
+  return (
+    /**
+     * https://haici.yuque.com/ta45kv/fkzax6/lscnurmr4evtl70y#AgVYV
+     * 核心 medicalFlag 字段含义, 1-自费 2-全医保 3-医保+自费
+     */
+
+    <View className={styles.mcancel}>
+      {/* <ReportForm onSubmit={setModalShow(true)}> */}
+      <Button
+        className={
+          // styles.cancelbtn
+          cn(styles.cancelbtn, {
+            [styles['refundActive']]: waitUserAuthFlag,
+          })
+        }
+        onClick={() =>
+          [2, 3].includes(Number(detailData?.medicalFlag))
+            ? setYbModalShow(true)
+            : setModalShow(true)
+        }
+        disabled={btnDisable}
+      >
+        {waitUserAuthFlag ? '授权退款' : '取消挂号'}
+      </Button>
+
+      {/* </ReportForm> */}
+      <AtModal isOpened={modalShow}>
+        {/* <AtModalHeader>标题</AtModalHeader> */}
+        <AtModalContent>
+          <RadioGroup className={styles.radioBox}>
+            {radioList.map((item, key) => {
+              return (
+                <Label for={String(key)} key={key} className={styles.radio}>
+                  <Radio
+                    name="testRadio"
+                    value={item.value}
+                    color="#3ECDB5"
+                    checked={item.checked}
+                    onClick={() => handelValue(key)}
+                  >
+                    {/* 修复支付宝端取消文案展示问题 */}
+                    {/* {item.value} */}
+                  </Radio>
+                  {item.value}
+                </Label>
+              );
+            })}
+          </RadioGroup>
+          {/* <AtTextarea
+            value={cancelReason}
+            onChange={value => setCancelReason(value)}
+            maxLength={20}
+            placeholder="请填写取消原因"
+          /> */}
+        </AtModalContent>
+        <AtModalAction>
+          <Button onClick={handleCancel}>保留号源</Button>
+          <Button onClick={cancelOrder}>确定取消</Button>
+        </AtModalAction>
+      </AtModal>
+    </View>
+  );
+};
+
+export default Index;
